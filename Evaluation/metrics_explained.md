@@ -1,5 +1,5 @@
 # GraphRAG-Benchmark — Evaluation Metrics Explained
-
+#Generation Metrics
 ## ROUGE-L
 
 **Type:** deterministic (pure math, no LLM judgment)
@@ -184,7 +184,7 @@ return (cosine_sim + 1) / 2
 Embed both texts → two vectors
 Dot product of the two vectors, divided by the product of their lengths (np.linalg.norm = vector length) — this is the cosine of the angle between them
 Cosine ranges from -1 (opposite) to 1 (identical direction); (cos + 1) / 2 rescales it to [0, 1]
-
+# Retrieval Metrics
 ## Context Relevance
 
 **Type:** LLM-based (non-deterministic)
@@ -259,3 +259,40 @@ Score = 0.5
 **Compared to Faithfulness:** both check against the retrieved contexts,
  but faithfulness divides by answer statements  (judging the hallucinations), 
 while evidence recall divides by number of reference evidences (judging the coverage of the facts  ).
+
+# Indexing Metrics
+
+**Type:** deterministic (pure graph statistics — no LLM, no question, no ground truth)
+**Family:** indexing — judges the knowledge graph itself, before any question is asked
+
+**Input:** the graph files produced by a framework during indexing
+**Output:** a dictionary of ~20 numbers (not a 0–1 score)
+
+**How it works:**
+1. Load the graph. Each framework stores it differently: 
+Microsoft GraphRAG uses two parquet files (entities and relationships), 
+LightRAG uses GraphML, Fast-GraphRAG uses picklez, HippoRAG2 uses pickle.
+ All of them are converted into a common `igraph.Graph` object.
+2. `analyze_graph()` computes the statistics on that graph.
+3. If several graphs are found under the given path, every statistic is averaged across them.
+
+**The statistics, grouped:**
+- **Size:** num_nodes, num_edges -how many entities and relationships the framework extracted
+- **Connectivity:** average_degree (edges per node), density (actual edges out of all possible ones), diameter (longest shortest path; returns infinity when the graph is disconnected)
+- **Fragmentation:** num_components (how many disconnected pieces), largest_component_size, num_isolated_nodes (entities with no relationship at all), plus five different averages of component size
+- **Clustering:** average_clustering_coefficient -how often a node's neighbours are also connected to each other
+- **Degree distribution:** num_nodes_degree_above_1 / _2 / _3 — 
+how many entities have more than 1, 2 or 3 connections
+
+**Why five averages of component size?** Component sizes are usually very skewed -
+one giant component plus many small ones. A plain mean hides that, so the code also reports median, 
+trimmed mean (dropping the largest and smallest), geometric mean and harmonic mean; 
+each is affected differently by outliers.
+
+**How to interpret:** these numbers are not "higher is better" on their own. 
+They are descriptive, and only become meaningful when the same statistics are compared across frameworks on the same dataset. 
+A heavily fragmented graph with many isolated nodes suggests entity extraction produced disconnected facts, 
+which limits what graph traversal can reach during retrieval.
+
+**Limitation:** it measures structure, not correctness. 
+A graph can be dense and well connected while containing wrong entities or hallucinated relationships — nothing here checks whether the extracted content is accurate.
