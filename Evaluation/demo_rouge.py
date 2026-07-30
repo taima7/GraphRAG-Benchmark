@@ -1,7 +1,14 @@
 import asyncio
-from Evaluation.metrics.rouge import compute_rouge_score
+import importlib.util
 
-# Change these two lines to your own example
+# Load rouge.py directly — skips __init__.py and all its dependencies
+spec = importlib.util.spec_from_file_location(
+    "rouge", "Evaluation/metrics/rouge.py"
+)
+rouge_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rouge_module)
+compute_rouge_score = rouge_module.compute_rouge_score
+
 GROUND_TRUTH = "The sun is powered by nuclear fusion in its core."
 ANSWER = "The sun produces energy by nuclear fusion happening in the core of the sun."
 

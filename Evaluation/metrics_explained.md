@@ -38,6 +38,27 @@ So ROUGE-L serves as the stable, cheap sanity baseline,
  Each metric compensates for the other's weakness.
  That's why the benchmark applies it only to short factual question types and pairs it with LLM-based metrics like Answer Correctness
 
+### Demonstration (actual run)
+
+Script: `Evaluation/demo_rouge.py`
+
+Ground truth (10 words): 
+"The sun is powered by nuclear fusion in its core."
+Answer (14 words): 
+"The sun produces energy by nuclear fusion happening in the core of the sun."
+
+Output:
+precision: 0.5000
+recall: 0.7000
+fmeasure: 0.5833
+
+The LCS is 7 words (the, sun, by, nuclear, fusion, in, core). 
+Recall = 7/10 = 0.7 because the denominator is the reference. 
+Precision = 7/14 = 0.5 because the denominator is the generated answer, 
+which is longer. F = 2·P·R/(P+R) = 0.5833.
+
+This confirms the rule: the extra words in the answer lower precision while recall stays high.
+
 ## Coverage
 
 **Type:** LLM-based (non-deterministic)
