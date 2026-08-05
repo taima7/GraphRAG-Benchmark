@@ -1,6 +1,8 @@
-# GraphRAG-Benchmark — Evaluation Metrics Explained
-#Generation Metrics
-## ROUGE-L
+# Evaluation Metrics Explained
+
+## Generation Metrics
+
+### ROUGE-L
 
 **Type:** deterministic (pure math, no LLM judgment)
 
@@ -19,14 +21,15 @@ A model's answer is 20 words, the GT is 10 words, the LCS is 6. What are P, R, a
 P= 6/10, R= 6/20 , f =(2*0.6* 0.3)/(0.9)
 
 **What the score means:**
-- high (1.0)= the generated answer closely follows the reference
- most of the reference's words appear in it, in the same order, without much extra padding.
-- low (0.0)= little shared word sequence 
-the answer either missed the reference content, or used completely different wording.
-- Limitation: 
+- high (1.0) = the generated answer closely follows the ground truth answer —
+most of the ground truth answer's words appear in it, in the same order, without much extra padding.
+- low (0.0) = little shared word sequence —
+the answer either missed the ground truth content, or used completely different wording.
+
+**Limitation:**
 ROUGE-L is used only for Fact Retrieval and Complex Reasoning question types, not for creative generation. For factual questions,
  answers are short and constrained ("Napoleon died in 1821") , there aren't many valid ways to phrase them, 
-so word overlap with the reference actually correlates well with correctness. 
+so word overlap with the ground truth answer actually correlates well with correctness. 
 And ROUGE-L specifically beats simpler word-counting (ROUGE-1) because requiring the right order catches scrambled or incoherent answers.
 ROUGE-L is semantically blind: an answer phrased entirely in synonyms ("the feline rested on the rug" vs "the cat sat on the mat")
  can be fully correct yet score near zero.
@@ -38,7 +41,7 @@ So ROUGE-L serves as the stable, cheap sanity baseline,
  Each metric compensates for the other's weakness.
  That's why the benchmark applies it only to short factual question types and pairs it with LLM-based metrics like Answer Correctness
 
-### Demonstration (actual run)
+#### Demonstration (actual run)
 
 Script: `Evaluation/demo_rouge.py`
 
@@ -59,7 +62,7 @@ which is longer. F = 2·P·R/(P+R) = 0.5833.
 
 This confirms the rule: the extra words in the answer lower precision while recall stays high.
 
-## Coverage
+### Coverage
 
 **Type:** LLM-based (non-deterministic)
 
@@ -86,7 +89,7 @@ Reference about seasons → 2 facts extracted. The answer "Seasons are caused by
 
 **Compared to ROUGE-L:** more expensive and slower, but it compares meaning instead of literal words — an answer using different wording can still score high.
 
-## Faithfulness
+### Faithfulness
 
 **Type:** LLM-based (non-deterministic)
 
@@ -123,7 +126,7 @@ Score = 1/4 = 0.25
  Coverage divides by the reference facts (recall -did the answer miss anything required?). 
 Faithfulness divides by the answer's own statements (precision -did the answer invent anything unsupported?).
 
-## Answer Correctness
+### Answer Correctness
 
 **Type:** LLM-based (non-deterministic) + embedding-based
 
@@ -156,6 +159,7 @@ Classification:
 - FN (5): all five ground truth statements the answer never mentions
 
 precision = 1/2 = 0.5, recall = 1/6 ≈ 0.17, F1 ≈ 0.25
+
 Final score = 0.75 × 0.25 + 0.25 × (similarity)
 
 **Edge cases:**
@@ -182,14 +186,19 @@ Cosine measures direction, not distance, so two texts about the same topic score
 
 This value cannot be computed by hand -it requires running the embedding model -so only the factuality part is calculated in the example above.
 Cosine similarity in this metric isn't computed on the words; it's computed on embeddings: each text is passed to an embedding model (in the eval script, BAAI/bge-large-en-v1.5),
-in python
+
+```python
 cosine_sim = np.dot(a_embed, gt_embed) / (np.linalg.norm(a_embed) * np.linalg.norm(gt_embed))
 return (cosine_sim + 1) / 2
-Embed both texts → two vectors
-Dot product of the two vectors, divided by the product of their lengths (np.linalg.norm = vector length) — this is the cosine of the angle between them
-Cosine ranges from -1 (opposite) to 1 (identical direction); (cos + 1) / 2 rescales it to [0, 1]
-# Retrieval Metrics
-## Context Relevance
+```
+
+- Embed both texts → two vectors
+- Dot product of the two vectors, divided by the product of their lengths (np.linalg.norm = vector length) — this is the cosine of the angle between them
+- Cosine ranges from -1 (opposite) to 1 (identical direction); (cos + 1) / 2 rescales it to [0, 1]
+
+## Retrieval Metrics
+
+### Context Relevance
 
 **Type:** LLM-based (non-deterministic)
 **Family:** retrieval metric — it judges the retriever, not the generated answer
@@ -197,7 +206,7 @@ Cosine ranges from -1 (opposite) to 1 (identical direction); (cos + 1) / 2 resca
 **Note:** Two implementations exist. `retrieval_eval.py` calls the three-argument version (v1), so v1 is what actually runs.
  v2 is imported in `__init__.py` under the alias `compute_context_relevance_v2` but no evaluation script calls it.
 
-### v1 (used)
+#### v1 (used)
 
 **Input:** question, retrieved contexts, LLM
 **Output:** one number between 0.0 and 1.0
@@ -221,7 +230,7 @@ Cosine ranges from -1 (opposite) to 1 (identical direction); (cos + 1) / 2 resca
 **Limitation:** depends on an LLM, so it costs money and can vary between runs.
  It also judges relevance to the question only — a context can look relevant without containing the specific evidence the correct answer needs.
 
-### v2 (present, not used)
+#### v2 (present, not used)
 
 Differences from v1:
 1. Takes the ground-truth **evidence** as an extra input, and judges relevance against the question *and* that evidence — a stricter, better-grounded test.
@@ -229,7 +238,7 @@ Differences from v1:
 3. Scores each context separately and averages, instead of joining all contexts into one block.
 4. Requires a `reason` with each score, which tends to make LLM judgments more consistent.
 
-## Evidence Recall
+### Evidence Recall
 
 **Type:** LLM-based (non-deterministic)
 **Family:** retrieval metric — it judges the retriever
@@ -264,7 +273,7 @@ Score = 0.5
  but faithfulness divides by answer statements  (judging the hallucinations), 
 while evidence recall divides by number of reference evidences (judging the coverage of the facts  ).
 
-# Indexing Metrics
+## Indexing Metrics
 
 **Type:** deterministic (pure graph statistics — no LLM, no question, no ground truth)
 **Family:** indexing — judges the knowledge graph itself, before any question is asked
