@@ -123,23 +123,6 @@ Score = 1/4 = 0.25
  Coverage divides by the reference facts (recall -did the answer miss anything required?). 
 Faithfulness divides by the answer's own statements (precision -did the answer invent anything unsupported?).
 
-
-
-**Edge cases:**
-- Empty answer→ returns 1.0 (there are no statements so nothing is missing)
-- LLM fails to return retrieved contexts → returns 0 which means the statements can't be supported
-- Extraction/JSON failure → NaN
-
-**What the score means:**
-- high = most of the statements in the answer are supported and grounded by the retrieved contexts
-- low = the model made claims the context doesn't support, i.e Hallucination
-
-**Limitation:** it depends on an LLM, so it costs money and can give a slightly different score on different runs.
-**Compared to Coverage:**
- Coverage and faithfulness use the same two-step LLM machinery and the same final line sum(...)/len(...).
- Coverage divides by the reference facts (recall -did the answer miss anything required?). 
-Faithfulness divides by the answer's own statements (precision -did the answer invent anything unsupported?).
-
 ## Answer Correctness
 
 **Type:** LLM-based (non-deterministic) + embedding-based
