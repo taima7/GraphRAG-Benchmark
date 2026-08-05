@@ -89,20 +89,31 @@ So ROUGE-L serves as the stable, cheap sanity baseline,
 
 #### Demonstration (actual run)
 
-Script: `Evaluation/demo_rouge.py`
+Script: [`doc/demo_rouge.py`](demo_rouge.py) — example data:
+[`doc/examples/rouge_example.json`](examples/rouge_example.json)
 
-Ground truth (10 words): 
+```shell
+python doc/demo_rouge.py
+```
+
+It needs only `rouge_score` installed, not the full evaluation dependencies.
+
+Ground truth answer (10 words):
 "The sun is powered by nuclear fusion in its core."
-Answer (14 words): 
+
+Generated answer (14 words):
 "The sun produces energy by nuclear fusion happening in the core of the sun."
 
 Output:
-precision: 0.5000
-recall: 0.7000
-fmeasure: 0.5833
+
+```
+    precision: 0.5000
+       recall: 0.7000
+     fmeasure: 0.5833
+```
 
 The LCS is 7 words (the, sun, by, nuclear, fusion, in, core). 
-Recall = 7/10 = 0.7 because the denominator is the reference. 
+Recall = 7/10 = 0.7 because the denominator is the ground truth answer. 
 Precision = 7/14 = 0.5 because the denominator is the generated answer, 
 which is longer. F = 2·P·R/(P+R) = 0.5833.
 

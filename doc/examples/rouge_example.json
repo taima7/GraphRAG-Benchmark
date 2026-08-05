@@ -1,0 +1,13 @@
+[
+  {
+    "id": "Demo-rouge-01",
+    "question": "What powers the sun?",
+    "question_type": "Fact Retrieval",
+    "context": [
+      "The sun generates its energy through nuclear fusion, which takes place in its core."
+    ],
+    "evidence": "The sun is powered by nuclear fusion in its core.",
+    "generated_answer": "The sun produces energy by nuclear fusion happening in the core of the sun.",
+    "ground_truth": "The sun is powered by nuclear fusion in its core."
+  }
+]
