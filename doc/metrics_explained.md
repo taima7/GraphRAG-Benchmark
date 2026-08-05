@@ -1,23 +1,69 @@
 # Evaluation Metrics Explained
 
+This document explains, at the algorithm level, what every metric in
+[`Evaluation/metrics/`](../Evaluation/metrics) actually computes. The metrics are grouped into the
+three families of the benchmark pipeline: [indexing](#indexing-metrics) (judges the knowledge
+graph), [retrieval](#retrieval-metrics) (judges the retriever) and
+[generation](#generation-metrics) (judges the produced answer).
+
+## Terminology
+
+Every metric below is described with the same **Input** / **Output** convention, each on its own
+line. The input names are fixed and always refer to the objects in this table, regardless of what
+the source code happens to call them locally.
+
+| Term used in this document | Field in the data files | Parameter name(s) in the code | What it is |
+| --- | --- | --- | --- |
+| **question** | `question` | `question` | the question put to the framework |
+| **ground truth answer** | `answer` in the question set, `ground_truth` in the prediction file | `ground_truth`, `reference` | the expected answer, shipped with the benchmark |
+| **generated answer** | `generated_answer` | `answer`, `response` | what the framework under test produced |
+| **retrieved contexts** | `context` | `contexts` | the passages the retriever returned for the question |
+| **reference evidence** | `evidence` | `reference_evidence`, `evidence` | the corpus snippets that support the ground truth answer |
+
+**"Reference answer" and "ground truth reference" are the same string.** It is the `answer` field
+of the question set, copied into the prediction file as `ground_truth`. The code names it
+inconsistently — [`compute_rouge_score`](../Evaluation/metrics/rouge.py) takes it as
+`ground_truth`, [`compute_coverage_score`](../Evaluation/metrics/coverage.py) takes it as
+`reference` — but [`generation_eval.py`](../Evaluation/generation_eval.py) passes the same value to
+both. This document calls it the **ground truth answer** throughout.
+
+It must not be confused with the **reference evidence** (`evidence`), a separate field holding the
+corpus snippets that support that answer. Only the retrieval metrics use it.
+
+## Mapping of metrics to question types
+
+Which metrics run is decided per question type, by `metric_config` in
+[`generation_eval.py`](../Evaluation/generation_eval.py):
+
+| Question type | Metrics applied |
+| --- | --- |
+| Fact Retrieval | ROUGE-L, Answer Correctness |
+| Complex Reasoning | ROUGE-L, Answer Correctness |
+| Contextual Summarize | Answer Correctness, Coverage |
+| Creative Generation | Answer Correctness, Coverage, Faithfulness |
+
+The retrieval metrics (Context Relevance, Evidence Recall) run on every question type, and the
+indexing metrics do not depend on questions at all.
+
 ## Generation Metrics
 
 ### ROUGE-L
 
 **Type:** deterministic (pure math, no LLM judgment)
 
-**Input:** generated answer (string), ground truth reference (string)
+**Input:** generated answer, ground truth answer
+
 **Output:** one number between 0.0 and 1.0
 
 **How it works:**
 1. Normalize both texts — stemming reduces words to roots (running → run).
 2. Find the LCS: the longest sequence of words appearing in both texts in the same order, gaps allowed.
 3. Precision = LCS length ÷ generated answer length.
-4. Recall = LCS length ÷ ground truth length.
+4. Recall = LCS length ÷ ground truth answer length.
 5. F1 = 2·P·R / (P + R) — harmonic mean, punishes imbalance between the two.
 
 **Worked example:**
-A model's answer is 20 words, the GT is 10 words, the LCS is 6. What are P, R, and F?
+A generated answer is 20 words, the ground truth answer is 10 words, the LCS is 6. What are P, R, and F?
 P= 6/10, R= 6/20 , f =(2*0.6* 0.3)/(0.9)
 
 **What the score means:**
@@ -66,19 +112,20 @@ This confirms the rule: the extra words in the answer lower precision while reca
 
 **Type:** LLM-based (non-deterministic)
 
-**Input:** question, reference answer, generated answer, and an LLM
+**Input:** question, ground truth answer, generated answer, and an LLM
+
 **Output:** one number between 0.0 and 1.0
 
 **How it works:**
-1. The LLM receives the reference answer and is asked to split it into separate factual statements.
+1. The LLM receives the ground truth answer and is asked to split it into separate factual statements.
 2. The LLM then receives those facts plus the generated answer, and marks each fact with 1 if it is covered in the generated answer, or 0 if it is not.
-3. Score = sum of the 1s and 0s ÷ total number of facts extracted from the reference.
+3. Score = sum of the 1s and 0s ÷ total number of facts extracted from the ground truth answer.
 
 **Example (from the code):**
-Reference about seasons → 2 facts extracted. The answer "Seasons are caused by Earth's tilted axis" covers 1 of them → score = 1/2 = 0.5
+Ground truth answer about seasons → 2 facts extracted. The generated answer "Seasons are caused by Earth's tilted axis" covers 1 of them → score = 1/2 = 0.5
 
 **Edge cases:**
-- Empty reference → returns 1.0 (there are no facts to cover, so nothing is missing)
+- Empty ground truth answer → returns 1.0 (there are no facts to cover, so nothing is missing)
 - LLM fails to return valid JSON after retries → returns NaN, which means the evaluation failed (not a bad score)
 
 **What the score means:**
@@ -93,7 +140,8 @@ Reference about seasons → 2 facts extracted. The answer "Seasons are caused by
 
 **Type:** LLM-based (non-deterministic)
 
-**Input:** question, answer, contexts, and an LLM
+**Input:** question, generated answer, retrieved contexts, and an LLM
+
 **Output:** one number between 0.0 and 1.0
 
 **How it works:**
@@ -130,7 +178,8 @@ Faithfulness divides by the answer's own statements (precision -did the answer i
 
 **Type:** LLM-based (non-deterministic) + embedding-based
 
-**Input:** question, generated answer, ground truth, an LLM, and an embeddings model
+**Input:** question, generated answer, ground truth answer, an LLM, and an embedding model
+
 **Output:** one number between 0.0 and 1.0
 
 **How it works:**
@@ -201,6 +250,7 @@ return (cosine_sim + 1) / 2
 ### Context Relevance
 
 **Type:** LLM-based (non-deterministic)
+
 **Family:** retrieval metric — it judges the retriever, not the generated answer
 
 **Note:** Two implementations exist. `retrieval_eval.py` calls the three-argument version (v1), so v1 is what actually runs.
@@ -208,7 +258,8 @@ return (cosine_sim + 1) / 2
 
 #### v1 (used)
 
-**Input:** question, retrieved contexts, LLM
+**Input:** question, retrieved contexts, and an LLM
+
 **Output:** one number between 0.0 and 1.0
 
 **How it works:**
@@ -241,17 +292,19 @@ Differences from v1:
 ### Evidence Recall
 
 **Type:** LLM-based (non-deterministic)
+
 **Family:** retrieval metric — it judges the retriever
 
-**Input:** reference evidences, retrieved contexts
+**Input:** question, retrieved contexts, reference evidence, and an LLM
+
 **Output:** one number between 0.0 and 1.0
 
 **How it works:**
-1. Unlike coverage, nothing needs to be split, because we already have list of reference evidences and retrived contexts
-2. The LLM receives references evidences and retrieved contexts , 
-marks each evidence item with 1 if it can be attributed to the retrieved contexts. 
+1. Unlike coverage, nothing needs to be split, because the reference evidence and the retrieved contexts are already lists.
+2. The LLM receives the reference evidence and the retrieved contexts,
+marks each evidence item with 1 if it can be attributed to the retrieved contexts.
 It also gives a reason for each decision (one sentence), like faithfulness and answer correctness do.
-3. Score = sum of attributed evidences ÷ number of reference evidences
+3. Score = sum of attributed evidence items ÷ number of reference evidence items
 
 **Example (from the prompt):**
 Context: "Einstein won the Nobel Prize in 1921 for physics."
@@ -271,14 +324,16 @@ Score = 0.5
 
 **Compared to Faithfulness:** both check against the retrieved contexts,
  but faithfulness divides by answer statements  (judging the hallucinations), 
-while evidence recall divides by number of reference evidences (judging the coverage of the facts  ).
+while evidence recall divides by the number of reference evidence items (judging the coverage of the facts).
 
 ## Indexing Metrics
 
 **Type:** deterministic (pure graph statistics — no LLM, no question, no ground truth)
+
 **Family:** indexing — judges the knowledge graph itself, before any question is asked
 
 **Input:** the graph files produced by a framework during indexing
+
 **Output:** a dictionary of ~20 numbers (not a 0–1 score)
 
 **How it works:**
