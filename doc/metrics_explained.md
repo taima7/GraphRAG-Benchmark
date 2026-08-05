@@ -64,7 +64,10 @@ indexing metrics do not depend on questions at all.
 
 **Worked example:**
 A generated answer is 20 words, the ground truth answer is 10 words, the LCS is 6. What are P, R, and F?
-P= 6/10, R= 6/20 , f =(2*0.6* 0.3)/(0.9)
+
+P = 6/20 = 0.3 (divided by the generated answer length),
+R = 6/10 = 0.6 (divided by the ground truth answer length),
+F = (2 × 0.3 × 0.6) / (0.3 + 0.6) = 0.36 / 0.9 = 0.4
 
 **What the score means:**
 - high (1.0) = the generated answer closely follows the ground truth answer —
