@@ -6,6 +6,39 @@ three families of the benchmark pipeline: [indexing](#indexing-metrics) (judges 
 graph), [retrieval](#retrieval-metrics) (judges the retriever) and
 [generation](#generation-metrics) (judges the produced answer).
 
+## Phases of the evaluation
+
+Two things run: the **framework under test**, which produces artifacts, and the **evaluation**, which
+reads those artifacts afterwards. The evaluation is entirely offline — no metric ever calls the
+framework.
+
+| Phase | The framework under test does | The evaluation reads | Script | Metrics applied |
+| --- | --- | --- | --- | --- |
+| **0. Benchmark inputs** | nothing yet | — | — | none |
+| **1. Indexing** | reads the corpus, extracts entities and relationships, writes a graph | the graph files, via `--base_path` | [`indexing_eval.py`](../Evaluation/indexing_eval.py) | graph statistics |
+| **2. Retrieval** | for each question, retrieves passages and records them as `context` | the prediction file, via `--data_file` | [`retrieval_eval.py`](../Evaluation/retrieval_eval.py) | Context Relevance, Evidence Recall |
+| **3. Generation** | feeds the retrieved contexts to its LLM, records `generated_answer` | the same prediction file | [`generation_eval.py`](../Evaluation/generation_eval.py) | chosen per question type — see [the mapping below](#mapping-of-metrics-to-question-types) |
+
+Phase 0 is what the benchmark ships: the corpus, plus a question set in which every item carries
+`question`, `answer` (the ground truth answer), `evidence` and `question_type`.
+
+**How often each phase is measured:**
+- Indexing metrics run once per framework and dataset. No question is involved at all.
+- Retrieval metrics run on every question of every question type. `retrieval_eval.py` groups the
+  results by `question_type`, but the set of metrics never varies.
+- Generation metrics run on every question, but which metrics apply depends on the question type.
+
+**Phases 2 and 3 are one artifact read by two scripts.** The framework runs once and writes a
+single prediction file holding both `context` and `generated_answer`; `retrieval_eval.py` and
+`generation_eval.py` are independent passes over that same file and can be run alone, in either
+order.
+
+**Faithfulness sits across the phase 2/3 boundary.** It is filed as a generation metric and reads
+the generated answer, but it compares against the retrieved contexts — the output of phase 2. That
+is what makes it able to isolate blame: if Evidence Recall is high while Faithfulness is low, the
+retriever found the evidence and the generator ignored it. Every other generation metric compares
+against the ground truth answer, and so cannot tell those two failures apart.
+
 ## Terminology
 
 Every metric below is described with the same **Input** / **Output** convention, each on its own
