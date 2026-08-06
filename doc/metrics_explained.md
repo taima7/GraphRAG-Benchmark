@@ -47,6 +47,15 @@ indexing metrics do not depend on questions at all.
 
 ## Generation Metrics
 
+**At a glance:**
+
+| Metric | In one line | Type | Divides by |
+| --- | --- | --- | --- |
+| **ROUGE-L** | length of the longest word sequence shared with the ground truth answer, turned into an F1 | deterministic | both answer lengths |
+| **Coverage** | share of the ground truth answer's facts that the generated answer also states | LLM | ground truth facts (recall) |
+| **Faithfulness** | share of the generated answer's statements that the retrieved contexts support | LLM | answer statements (precision) |
+| **Answer Correctness** | statement-level F1 against the ground truth answer (75%) plus embedding similarity (25%) | LLM + embedding | both directions |
+
 ### ROUGE-L
 
 **Type:** deterministic (pure math, no LLM judgment)
@@ -261,6 +270,13 @@ return (cosine_sim + 1) / 2
 
 ## Retrieval Metrics
 
+**At a glance:**
+
+| Metric | In one line | Type | Divides by |
+| --- | --- | --- | --- |
+| **Context Relevance** | how well the retrieved contexts can answer the question, rated 0–2 by an LLM twice and averaged | LLM | number of ratings |
+| **Evidence Recall** | share of the reference evidence items that the retrieved contexts contain | LLM | reference evidence items |
+
 ### Context Relevance
 
 **Type:** LLM-based (non-deterministic)
@@ -341,6 +357,12 @@ Score = 0.5
 while evidence recall divides by the number of reference evidence items (judging the coverage of the facts).
 
 ## Indexing Metrics
+
+**At a glance:**
+
+| Metric | In one line | Type | Output |
+| --- | --- | --- | --- |
+| **Graph statistics** | ~20 structural numbers describing the knowledge graph itself — size, connectivity, fragmentation, clustering | deterministic | a dictionary, not a 0–1 score |
 
 **Type:** deterministic (pure graph statistics — no LLM, no question, no ground truth)
 
