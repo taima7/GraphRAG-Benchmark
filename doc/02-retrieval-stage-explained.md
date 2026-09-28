@@ -72,4 +72,21 @@ Separate metrics pinpoint which half of the pipeline to actually fix: **Context 
 
 ---
 
+## Sources
+
+**Frameworks**
+
+- **GraphRAG** — Edge, D. et al. (2024). *From Local to Global: A Graph RAG Approach to Query-Focused Summarization.* [arXiv:2404.16130](https://arxiv.org/abs/2404.16130). Code: [microsoft/graphrag](https://github.com/microsoft/graphrag). Docs: [microsoft.github.io/graphrag](https://microsoft.github.io/graphrag/)
+- **LightRAG** — Guo, Z. et al. (2024). *LightRAG: Simple and Fast Retrieval-Augmented Generation.* [arXiv:2410.05779](https://arxiv.org/abs/2410.05779). Code: [HKUDS/LightRAG](https://github.com/HKUDS/LightRAG)
+- **Fast-GraphRAG** — no paper; code and README: [circlemind-ai/fast-graphrag](https://github.com/circlemind-ai/fast-graphrag)
+- **HippoRAG2** — Gutiérrez, B. J. et al. (2025). *From RAG to Memory: Non-Parametric Continual Learning for Large Language Models.* [arXiv:2502.14802](https://arxiv.org/abs/2502.14802). Code: [OSU-NLP-Group/HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG)
+- **HippoRAG (original)** — Gutiérrez, B. J. et al. (2024). *HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models.* [arXiv:2405.14831](https://arxiv.org/abs/2405.14831)
+
+**Benchmark**
+
+- **GraphRAG-Bench** — Xiang, Z. et al. (2025). *When to use Graphs in RAG: A Comprehensive Analysis for Graph Retrieval-Augmented Generation.* [arXiv:2506.05690](https://arxiv.org/abs/2506.05690). Code: [GraphRAG-Bench/GraphRAG-Benchmark](https://github.com/GraphRAG-Bench/GraphRAG-Benchmark)
+- **Metric definitions** — [`metrics_explained.md`](./metrics_explained.md) in this repository
+
+---
+
 *Next: [Generation stage](./03-generation-stage-explained.md) — how the retrieved context actually becomes a final answer, and how ROUGE-L, Coverage, Faithfulness, and Answer Correctness each check something different about that process.*

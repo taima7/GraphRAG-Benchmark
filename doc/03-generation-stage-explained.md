@@ -59,4 +59,18 @@ So the honest framing: ROUGE-L is a weak metric on its own, but a genuinely usef
 
 ---
 
+## Sources
+
+**Metrics**
+
+- **RAGAS** — Es, S. et al. (2023). *Ragas: Automated Evaluation of Retrieval Augmented Generation.* [arXiv:2309.15217](https://arxiv.org/abs/2309.15217). Docs: [Faithfulness](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/faithfulness/), [Answer Correctness](https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/answer_correctness/)
+- **ROUGE** — Lin, C.-Y. (2004). *ROUGE: A Package for Automatic Evaluation of Summaries.* In *Text Summarization Branches Out*, ACL. [aclanthology.org/W04-1013](https://aclanthology.org/W04-1013/)
+
+**Benchmark**
+
+- **GraphRAG-Bench** — Xiang, Z. et al. (2025). *When to use Graphs in RAG: A Comprehensive Analysis for Graph Retrieval-Augmented Generation.* [arXiv:2506.05690](https://arxiv.org/abs/2506.05690). Code: [GraphRAG-Bench/GraphRAG-Benchmark](https://github.com/GraphRAG-Bench/GraphRAG-Benchmark)
+- **Metric definitions** — [`metrics_explained.md`](./metrics_explained.md) in this repository
+
+---
+
 This completes all three stages: [Indexing](./01-indexing-stage-explained.md) → [Retrieval](./02-retrieval-stage-explained.md) → Generation.
