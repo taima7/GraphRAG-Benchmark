@@ -6,6 +6,12 @@ three families of the benchmark pipeline: [indexing](#indexing-metrics) (judges 
 graph), [retrieval](#retrieval-metrics) (judges the retriever) and
 [generation](#generation-metrics) (judges the produced answer).
 
+For a plain-English walkthrough of *how* each stage actually works — not just what its metrics
+measure, but the mechanism itself, and how it differs across GraphRAG, LightRAG, Fast-GraphRAG and
+HippoRAG2 — see [01-indexing-stage-explained.md](01-indexing-stage-explained.md),
+[02-retrieval-stage-explained.md](02-retrieval-stage-explained.md), and
+[03-generation-stage-explained.md](03-generation-stage-explained.md).
+
 ## Phases of the evaluation
 
 Two things run: the **framework under test**, which produces artifacts, and the **evaluation**, which
@@ -79,6 +85,10 @@ The retrieval metrics (Context Relevance, Evidence Recall) run on every question
 indexing metrics do not depend on questions at all.
 
 ## Generation Metrics
+
+> For a plain-English walkthrough of how generation actually works, and why a deterministic metric
+> like ROUGE-L is still useful alongside the LLM-based ones, see
+> [03-generation-stage-explained.md](03-generation-stage-explained.md).
 
 **At a glance:**
 
@@ -303,6 +313,11 @@ return (cosine_sim + 1) / 2
 
 ## Retrieval Metrics
 
+> For a plain-English walkthrough of how each framework (GraphRAG, LightRAG, Fast-GraphRAG,
+> HippoRAG2) actually produces "retrieved contexts" — the seed-and-expand pattern, Local vs.
+> Global Search, dual-level keywords, and Personalized PageRank — see
+> [02-retrieval-stage-explained.md](02-retrieval-stage-explained.md).
+
 **At a glance:**
 
 | Metric | In one line | Type | Divides by |
@@ -390,6 +405,10 @@ Score = 0.5
 while evidence recall divides by the number of reference evidence items (judging the coverage of the facts).
 
 ## Indexing Metrics
+
+> For a plain-English walkthrough of why graphs get built at all, the shared extraction mechanism,
+> and what each framework (GraphRAG, LightRAG, Fast-GraphRAG, HippoRAG2) adds on top of it, see
+> [01-indexing-stage-explained.md](01-indexing-stage-explained.md).
 
 **At a glance:**
 

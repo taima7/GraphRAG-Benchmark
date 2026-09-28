@@ -1,0 +1,111 @@
+# Indexing Stage — Explained
+
+## What is indexing?
+
+Indexing is the **offline** stage. It happens once, before anyone asks a question. The framework reads the raw text and builds a **knowledge graph** out of it: entities ("things," like people, companies, places) and relationships ("how those things connect").
+
+## Why build a graph instead of just storing text chunks?
+
+Plain/vanilla RAG also indexes once — it just splits text into chunks and stores them (usually as embeddings). The problem: each chunk is self-contained, and retrieval works by matching the *question's meaning* against a chunk's meaning. If the facts needed to answer a question are spread across several chunks that never sit next to each other, no single chunk looks similar enough to the question to be retrieved — even though every individual fact is written down somewhere.
+
+**Example:** "Ahmad works at Company X." / "Sara manages Company X." / "Company X is based in Prague and makes medical devices." — three separate sentences, maybe far apart in the document.
+
+A question like *"who works under the person who runs the Prague medical-device company?"* needs all three facts connected. No single chunk contains that chain, so chunk-similarity search struggles.
+
+A graph fixes this because each fact becomes its own **edge**, stored permanently. Retrieval can then **hop** from node to node (Company X → its manager → that manager's team) and stitch the chain together. This is called **multi-hop reasoning**, and it's the main thing graphs add that chunk-search structurally cannot do.
+
+## The shared core mechanism (every framework does this)
+
+1. Split the document into chunks (same as vanilla RAG).
+2. For each chunk, prompt an LLM: *"List every entity mentioned, and every relationship between entities."*
+3. The LLM returns a structured list per chunk.
+4. Merge matching entities/relationships across chunks into one graph.
+
+**A known weak spot:** GraphRAG and LightRAG merge entities only when their names match **exactly** (GraphRAG also needs the same entity type). If the same entity is called "Company X" in one chunk and "the company" in another, they do **not** get merged — the graph ends up more fragmented than it should be (extra isolated pieces, disconnected components), not because the facts are unrelated, but because the names didn't match. The GraphRAG paper says it uses exact string matching on purpose, and that duplicates usually end up in the same community anyway. Fast-GraphRAG and HippoRAG2 add a partial fix: they compare entity **embeddings** and link entities that are very similar with an extra edge (see their sections below).
+
+On top of this shared core, each framework adds something different.
+
+---
+
+## GraphRAG (Microsoft)
+
+Adds two extra layers on top of the shared core:
+
+- **Claims** *(optional, off by default in current versions)* — an assertion about one entity, with a truth status (`TRUE` / `FALSE` / `SUSPECTED`) and a start and end date. Different from a relationship: a relationship says "a link exists"; a claim says "someone alleged something, and here's how confident we are."
+- **Communities** — after the graph is built, the **Leiden algorithm** (no LLM, purely structural — it just looks at edge patterns) groups entities that are more tightly connected to each other than to the rest of the graph. Done at multiple zoom levels (like continent → country → city). Then an LLM writes a short **community report** summarizing each group.
+
+**Why communities matter:** multi-hop traversal is great for specific, connected questions ("who works under X"), but useless for broad, thematic questions ("what are the main topics in this dataset?"). No single hop-chain answers that — you need something pre-summarized. That's what community reports are for.
+
+**DIGIMON classification:** entities + relationships + text descriptions, no relationship keywords → **Textual KG**.
+
+## LightRAG
+
+Skips communities entirely. Instead, in the *same* LLM call that extracts entities and relationships, it also attaches keywords:
+
+- Every **entity** gets one key: its own name.
+- Every **relationship** gets one or more **topic keywords** (e.g., "employment," "medical industry").
+
+Later, a question gets split into **low-level keywords** (specific things → matched against entity names) and **high-level keywords** (general topics → matched against relationship keywords). This is **dual-level retrieval**.
+
+**Advantage vs. GraphRAG:** cheaper (no separate whole-graph clustering pass, no per-community report-writing), and easier to update incrementally — adding one new document doesn't require recomputing anything about the rest of the graph's structure. GraphRAG may need to redo clustering as the graph grows.
+
+**Possible disadvantage vs. GraphRAG:** because keywords are assigned per relationship independently, with nothing looking at the graph as a whole, two relationships about the same real topic might get worded differently ("employment" vs. "job") and never get linked. Even when keywords do match, the result is a set of tagged relationships — not a written summary. So, in theory, broad "what's this dataset about" questions could get a weaker answer than GraphRAG's community report. **But note:** this is an argument from the design, not a measured result. The LightRAG paper's own tests on broad questions report that LightRAG beats GraphRAG, especially on larger datasets.
+
+**DIGIMON classification:** entities + relationships + text descriptions + relationship keywords → **Rich KG** (the richest of the frameworks covered here).
+
+## Fast-GraphRAG
+
+Indexing is the shared core plus one small extra step. No claims, no communities, no keyword tags. The extra step: every entity gets an **embedding**, and when two entities are very similar (similarity of 0.9 or more), Fast-GraphRAG adds an extra **"is" edge** between them. This is a partial fix for the name-mismatch weak spot described above.
+
+**Trade-off:** this makes it cheap to index (its README reports about 6x lower cost than GraphRAG on one example book), but it has no pre-written summaries for broad, thematic questions, since there's no community-report equivalent. It tries to make up for this at **retrieval time** instead, using a technique borrowed from HippoRAG (Personalized PageRank) — covered in the retrieval-stage document.
+
+**DIGIMON classification:** entities + relationships + text descriptions → **Textual KG** (same type as GraphRAG).
+
+## HippoRAG2
+
+Adds something structurally different from the other three:
+
+1. Extracts entities and relationships like everyone else (using OpenIE-style extraction). The result is a set of triples (subject → relation → object).
+2. Adds **synonym edges**: it compares entity embeddings, and when two entities are more similar than a set threshold, it links them.
+3. Also puts the **text passages/chunks themselves into the graph as nodes** — not just entities. A passage node connects to every entity taken from it, with a **"contains"** edge.
+4. Entities, passages, and triples all get an **embedding**.
+
+**Why passage nodes matter:** when the LLM extracts a relationship, it compresses the original sentence into something short (`Ahmad —works at→ Company X`), throwing away the original wording and detail. A pure entity/relationship graph can tell you *that* a fact exists, but can't hand back the *actual sentence* that proved it. Passage nodes fix this — after graph traversal finds the relevant entities, the connected passage nodes can be pulled directly, giving back real, groundable text. This matters for the generation stage, where the **Faithfulness** metric checks whether the generated answer's claims are actually supported by the retrieved context — real text supports that check better than a compressed fact does.
+
+**Why synonym edges matter:** they catch entity matches that exact-name-matching would miss (a partial fix for the fragmentation weak spot mentioned above).
+
+**DIGIMON classification:** DIGIMON only covers the original HippoRAG, not HippoRAG2. It puts the original HippoRAG in the plain **Knowledge Graph** type (entities and relationships, no text descriptions). HippoRAG2's main new idea (passage nodes) is not something DIGIMON's types measure.
+
+---
+
+## Comparison table
+
+| Framework | Extra indexing layer | Cost/speed | Good for | Weak for |
+|---|---|---|---|---|
+| **GraphRAG** | Claims (optional) + Communities/reports | Most expensive (extra clustering + report-writing pass) | Broad, thematic questions ("what are the main topics?") | Cost and incremental updates (may need to redo clustering as data grows) |
+| **LightRAG** | Relationship keywords (same LLM call) | Cheaper than GraphRAG, easy incremental updates | Specific questions matching entity names or relationship topics (dual-level retrieval) | In theory, broad questions (no written summary, just tags) — but its paper reports beating GraphRAG on broad questions |
+| **Fast-GraphRAG** | Only entity embeddings + "is" edges between very similar entities | Cheap to index (README reports ~6x lower cost than GraphRAG) | Specific, connected questions (via multi-hop traversal); relies on retrieval-time PageRank to compensate | Broad, thematic questions — no community-style summary at all |
+| **HippoRAG2** | Passage nodes + synonym edges + embeddings | Lightweight indexing, but adds passage nodes/embeddings | Questions needing real, groundable text (good for faithfulness); synonym edges partly reduce name-mismatch fragmentation | Not built for broad-theme summarization either — its strength is grounding, not summarizing |
+
+**Bottom line:** GraphRAG and LightRAG solve the "broad theme" problem differently (structural clustering + summary vs. lightweight keyword tags); GraphRAG's answer is a real written summary, but costs more. Fast-GraphRAG and HippoRAG2 both skip that problem at indexing time and lean on smarter retrieval instead — Fast-GraphRAG for raw speed, HippoRAG2 for text-grounded accuracy.
+
+---
+
+## Sources
+
+**Frameworks**
+
+- **GraphRAG** — Edge, D. et al. (2024). *From Local to Global: A Graph RAG Approach to Query-Focused Summarization.* [arXiv:2404.16130](https://arxiv.org/abs/2404.16130). Code: [microsoft/graphrag](https://github.com/microsoft/graphrag). Docs: [microsoft.github.io/graphrag](https://microsoft.github.io/graphrag/)
+- **LightRAG** — Guo, Z. et al. (2024). *LightRAG: Simple and Fast Retrieval-Augmented Generation.* [arXiv:2410.05779](https://arxiv.org/abs/2410.05779). Code: [HKUDS/LightRAG](https://github.com/HKUDS/LightRAG)
+- **Fast-GraphRAG** — no paper; code and README: [circlemind-ai/fast-graphrag](https://github.com/circlemind-ai/fast-graphrag)
+- **HippoRAG2** — Gutiérrez, B. J. et al. (2025). *From RAG to Memory: Non-Parametric Continual Learning for Large Language Models.* [arXiv:2502.14802](https://arxiv.org/abs/2502.14802). Code: [OSU-NLP-Group/HippoRAG](https://github.com/OSU-NLP-Group/HippoRAG)
+
+**Benchmark and taxonomy**
+
+- **GraphRAG-Bench** — Xiang, Z. et al. (2025). *When to use Graphs in RAG: A Comprehensive Analysis for Graph Retrieval-Augmented Generation.* [arXiv:2506.05690](https://arxiv.org/abs/2506.05690). Code: [GraphRAG-Bench/GraphRAG-Benchmark](https://github.com/GraphRAG-Bench/GraphRAG-Benchmark)
+- **Metric definitions** — [`metrics_explained.md`](./metrics_explained.md) in this repository
+- **DIGIMON** — Zhou, Y. et al. (2025). *In-depth Analysis of Graph-based RAG in a Unified Framework.* [arXiv:2503.04338](https://arxiv.org/abs/2503.04338). Code: [JayLZhou/GraphRAG](https://github.com/JayLZhou/GraphRAG)
+
+---
+
+*Next: [Retrieval stage](./02-retrieval-stage-explained.md) — how each framework actually walks the graph it built here to produce "retrieved contexts."*
