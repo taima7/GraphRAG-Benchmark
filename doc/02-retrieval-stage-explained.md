@@ -12,18 +12,18 @@ That pulled-out material is called the **retrieved context**. It's the input han
 
 Every framework turns the question into something comparable against the graph — usually via **embeddings** (question meaning vs. node meaning) or **keywords** (specific words matched against entity names/tags). This produces a small set of **seed nodes**: starting points in the graph.
 
-Retrieval never compares the question directly against *every* node. Why: direct similarity only finds nodes that *look like* the question in wording. But some relevant nodes (like "Sara" in a question that never mentions her by name) are only relevant because they're **connected**, through a chain of edges, to something that does match directly. This is the same reason a graph was built in the first place (see indexing doc) — multi-hop reasoning has to actually get *executed* somewhere, and that's here: seeds are found by direct matching, then the graph's edges carry relevance to everything connected to those seeds.
+Retrieval does not stop at direct similarity. Why: direct similarity only finds nodes that *look like* the question in wording. But some relevant nodes (like "Sara" in a question that never mentions her by name) are only relevant because they're **connected**, through a chain of edges, to something that does match directly. This is the same reason a graph was built in the first place (see indexing doc) — multi-hop reasoning has to actually get *executed* somewhere, and that's here: seeds are found by direct matching, then the graph's edges carry relevance to everything connected to those seeds.
 
 ---
 
 ## GraphRAG: Local Search vs. Global Search
 
-GraphRAG has two separate retrieval modes, chosen based on question type:
+GraphRAG has two main retrieval modes, chosen based on question type (newer versions also add DRIFT Search and Basic Search, not covered here):
 
-- **Local Search** (specific questions): find seed entities via embedding similarity to the question, then pull in their **direct (1-hop)** relationships, claims, and source text chunks.
+- **Local Search** (specific questions): find seed entities via embedding similarity to the question, then pull in their **direct (1-hop)** related entities and relationships, their claims, their source text chunks, and the **community reports** of the communities those entities belong to.
 - **Global Search** (broad, thematic questions): skips entities entirely. Searches across **community reports** (built during indexing) using a map-reduce process — check the question's relevance against each report, then combine the useful ones.
 
-**Why the wrong mode fails:** Local Search on a broad question fails because a broad question doesn't resemble any single entity's description, and even if it picked seeds, it only expands to a narrow 1-hop neighborhood — never the big picture. Global Search on a specific question fails because community reports are compressed summaries; a precise detail may get flattened out of the summary entirely, and checking every report for one fact is expensive overkill.
+**Why the wrong mode fails:** Local Search on a broad question fails because a broad question doesn't resemble any single entity's description, and even if it picked seeds, it only expands to a narrow 1-hop neighborhood plus the few community reports linked to those seeds — not the whole dataset. Global Search on a specific question fails because community reports are compressed summaries; a precise detail may get flattened out of the summary entirely, and checking every report for one fact is expensive overkill.
 
 ## LightRAG: dual-level keyword retrieval
 
@@ -31,9 +31,11 @@ The question is split by an LLM into:
 - **Low-level keywords** (specific things) → matched against the entity vector index.
 - **High-level keywords** (general topics) → matched against the relationship-keyword vector index.
 
-Both run on every question (no separate "modes" like GraphRAG), and results are merged.
+Then LightRAG also adds the **one-hop neighbors** of the matched entities and relationships, to bring in nearby connected facts.
 
-**Gap vs. GraphRAG's Global Search:** the "high-level" side still only matches individual relationship-keyword tags — scattered facts that happen to share a keyword. It never produces a genuine synthesized summary the way a community report does. It approximates broad-question coverage; it doesn't replicate real summarization.
+In the paper, both levels run together on every question and the results are merged. The code also offers separate modes: `local` (low-level only), `global` (high-level only), `hybrid` (both), plus `naive` and `mix`. **This benchmark runs LightRAG in `hybrid` mode.**
+
+**Possible gap vs. GraphRAG's Global Search:** the "high-level" side still only matches individual relationship-keyword tags — scattered facts that happen to share a keyword. It never produces a pre-written summary the way a community report does. **But note:** this is an argument from the design; the LightRAG paper's own tests on broad questions report that LightRAG beats GraphRAG.
 
 ## Fast-GraphRAG and HippoRAG2: Personalized PageRank (PPR)
 
@@ -42,8 +44,8 @@ Both use the same core trick, borrowed from PageRank (the original Google rankin
 **Why this beats Local Search on hard questions:** Local Search has a hard cutoff at 1 hop — anything further away is structurally unreachable, no matter how relevant. PPR has no hard cutoff; relevance keeps spreading across as many hops as the graph allows, just weaker with distance. So multi-hop questions (2, 3+ hops from a seed) can still surface, just ranked lower than closer facts.
 
 **The difference between the two:**
-- **Fast-GraphRAG**: its graph only has entity/relationship nodes (indexing added nothing extra). PPR ranks entities, then a **separate step afterward** traces top entities back to source chunks to build the actual context text. Risk: an entity may appear in several chunks, so a heuristic has to pick which one(s) to include — an approximation layered on *after* the real relevance computation, which can pick a chunk that mentions the entity but isn't the one with the specific needed fact.
-- **HippoRAG2**: passage nodes are already part of the graph (from indexing). PPR spreads relevance across entity nodes **and** passage nodes in the *same* pass — so a passage's score already reflects genuine graph-connectivity to the question, no separate "go find the source chunk" step, and no extra approximation layer.
+- **Fast-GraphRAG**: first an LLM pulls the entities out of the question, and these are matched to graph entities by embedding similarity (the seeds). Its graph has no passage nodes, so PPR only ranks **entities**. Then two **separate steps afterward** turn that into text: each relationship gets a score from the scores of the entities it connects, and each chunk gets a score by adding up the scores of the relationships that were extracted from it. The top entities, relationships, and chunks become the context. The limit: chunks are never part of the PageRank itself — their scores are worked out afterward, from the entity scores.
+- **HippoRAG2**: seeds are chosen differently. The whole question is matched against **triples** by embedding similarity, and then an LLM **filters** these triples, keeping only the relevant ones (the paper calls this "recognition memory"). The entities in the kept triples become seeds. **All passage nodes** are also seeds, each weighted by how similar it is to the question. Because passage nodes are already part of the graph (from indexing), PPR spreads relevance across entity nodes **and** passage nodes in the *same* pass. Passages are then ranked by their PageRank score, and the top passages become the context — so a passage's score already reflects graph-connectivity to the question, with no separate "go find the source chunk" step.
 
 ---
 
@@ -66,9 +68,9 @@ Separate metrics pinpoint which half of the pipeline to actually fix: **Context 
 | Framework | Retrieval mechanism | Good for | Weak for |
 |---|---|---|---|
 | **GraphRAG** | Local Search (1-hop from seed entities) or Global Search (community reports, map-reduce) — picks one mode | Specific questions (Local) or broad thematic questions (Global) — whichever mode matches | Wrong mode picked for the question type; Local Search structurally can't reach beyond 1 hop |
-| **LightRAG** | Dual-level: low-level keywords → entities, high-level keywords → relationship tags, merged | Runs one unified process for both specific and general questions | Broad questions get scattered tagged facts, not real synthesis |
-| **Fast-GraphRAG** | Personalized PageRank over entities, then a separate step to trace back to source chunks | Multi-hop questions beyond 1 hop, at low cost | Extra approximation step when picking which source chunk to use for a top-ranked entity |
-| **HippoRAG2** | Personalized PageRank over entities **and** passage nodes together | Multi-hop questions, with strong grounding to real source text (good for faithfulness) | Not built for broad-theme summarization (no community-report equivalent) |
+| **LightRAG** | Dual-level: low-level keywords → entities, high-level keywords → relationship tags, plus one-hop neighbors, merged (`hybrid` mode in this benchmark) | One process for both specific and general questions | In theory, broad questions get tagged facts, not a written summary (its paper reports beating GraphRAG on broad questions anyway) |
+| **Fast-GraphRAG** | Personalized PageRank over entities, then relationship and chunk scores worked out from the entity scores | Multi-hop questions beyond 1 hop, at low cost | Chunks are scored after PageRank, not inside it |
+| **HippoRAG2** | Question → triples, filtered by an LLM, then Personalized PageRank over entities **and** passage nodes together; returns top passages | Multi-hop questions, with strong grounding to real source text (good for faithfulness) | Not built for broad-theme summarization (no community-report equivalent) |
 
 ---
 

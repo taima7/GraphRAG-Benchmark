@@ -4,15 +4,19 @@
 
 Generation is the last step. It takes the **retrieved context** (the text pulled out in the retrieval stage — see [02-retrieval-stage-explained.md](./02-retrieval-stage-explained.md)) and the original **question**, hands both to an LLM, and asks it to write the final answer.
 
-One important thing worth noticing: unlike indexing and retrieval, **generation itself doesn't really differ between frameworks**. By the time you reach this stage, all you have is "some context text" plus "a question" — GraphRAG, LightRAG, Fast-GraphRAG, and HippoRAG2 could all hand this off to the exact same LLM in the exact same way. The real differences between frameworks live **upstream**, in *what* context they hand over (covered in the retrieval doc), not in *how* the final answer gets written. So generation metrics end up measuring two things at once: how well the LLM wrote the answer, **and** indirectly, how good the context it was given actually was.
+One important thing worth noticing: generation is the **simplest** of the three stages. By the time you reach it, all you have is "some context text" plus "a question". In principle, GraphRAG, LightRAG, Fast-GraphRAG, and HippoRAG2 could all hand this to the exact same LLM with the exact same prompt. The biggest differences between frameworks live **upstream**, in *what* context they hand over (covered in the retrieval doc).
+
+**But in this benchmark, generation is not identical across frameworks.** The GraphRAG-Bench paper says it kept each framework's **default** settings, including its own generation method and prompt. Only a few things are shared: the same embedding model (bge-large-en-v1.5) and the same generation temperature (0.7). For example, the benchmark's LightRAG script uses its own system prompt, while Fast-GraphRAG and HippoRAG2 use their built-in answer functions.
+
+So generation metrics end up measuring three things at once: how good the context was, how well the LLM wrote the answer, **and** how good each framework's own answer prompt is.
 
 ## The four generation metrics
 
 ### 1. ROUGE-L (deterministic — no LLM involved)
 
-Looks for the **longest common sequence of words** shared between the generated answer and the reference (ground-truth) answer, then turns that overlap into an F1 score (a precision/recall-style combined score).
+Looks for the **longest common subsequence** of words shared between the generated answer and the reference (ground-truth) answer. "Subsequence" means the words must appear in the same order in both texts, but they don't have to be next to each other. It then turns that overlap into an F1 score (a precision/recall-style combined score). In this benchmark, words are first reduced to their stem (so "works" and "working" count as the same word).
 
-**Its big weakness:** it only looks at matching *words*, not *meaning*. If the reference says "Ahmad is employed by Company X" and the generated answer says "Ahmad works for Company X" — same meaning, different words — ROUGE-L scores this low, even though the answer is completely correct. This is called **semantic blindness**.
+**Its big weakness:** it only looks at matching *words*, not *meaning*. If the reference says "Ahmad is employed by Company X" and the generated answer says "Ahmad works for Company X" — same meaning, different words — only "Ahmad", "Company" and "X" match, so ROUGE-L gives about **0.55** out of 1, even though the answer is completely correct. This is called **semantic blindness**.
 
 ### 2. Coverage (LLM-based)
 
@@ -28,12 +32,12 @@ This is deliberate, and it's the key design choice of this metric: Faithfulness 
 
 ### 4. Answer Correctness (LLM + embeddings, hybrid)
 
-Each statement in the generated answer gets classified against the reference answer as:
+An LLM splits **both** the generated answer and the reference answer into short statements. Then it classifies them as:
 - **True Positive** — correct fact, present in both.
 - **False Positive** — stated in the generated answer, but not actually in the reference (extra/wrong info).
 - **False Negative** — in the reference, but missing from the generated answer.
 
-This produces a precision/recall-style score, which makes up **75%** of the final score. The remaining **25%** comes from **semantic similarity** — comparing the generated and reference answers as embeddings, to also capture overall meaning-match beyond exact fact-by-fact classification.
+These counts give an F1 score (precision/recall-style), which makes up **75%** of the final score. The remaining **25%** comes from **semantic similarity** — comparing the generated and reference answers as embeddings (cosine similarity), to also capture overall meaning-match beyond exact fact-by-fact classification. This 75% / 25% split is the RAGAS default, and the benchmark code uses the same split.
 
 This is the most complete of the four metrics: it catches missing facts (like Coverage), catches *extra wrong* facts (which Coverage doesn't), and also rewards answers that are worded differently but mean the same thing (which raw fact-classification alone wouldn't fully capture).
 
